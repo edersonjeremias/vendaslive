@@ -23,8 +23,9 @@ function NewSalePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
-  const [clientsLoading, setClientsLoading] = useState(true);
+  const [clientsLoading, setClientsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [images, setImages] = useState<File[]>([]);
   const [imagesPreviews, setImagesPreviews] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -41,66 +42,48 @@ function NewSalePage() {
     }
   });
   
-  const selectedClientId = watch('clientId');
-  
   useEffect(() => {
-    if (!user) return;
-    
-    // Fetch recent clients
-    async function fetchClients() {
+    if (!user || searchTerm.length < 2) {
+      setClients([]);
+      return;
+    }
+
+    const searchClients = async () => {
       setClientsLoading(true);
-      
       try {
         const { data, error } = await supabase
           .from('clients')
           .select('id, name')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
+          .ilike('name', `%${searchTerm}%`)
+          .order('name')
           .limit(10);
           
         if (error) throw error;
-        
         setClients(data || []);
       } catch (error) {
-        console.error('Error fetching clients:', error);
+        console.error('Erro ao buscar clientes:', error);
       } finally {
         setClientsLoading(false);
       }
-    }
-    
-    fetchClients();
-  }, [user]);
-  
-  const handleClientSearch = async () => {
-    if (!user || !searchTerm) return;
-    
-    setClientsLoading(true);
-    
-    try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('id, name')
-        .eq('user_id', user.id)
-        .ilike('name', `%${searchTerm}%`)
-        .order('name')
-        .limit(10);
-        
-      if (error) throw error;
-      
-      setClients(data || []);
-    } catch (error) {
-      console.error('Error searching clients:', error);
-    } finally {
-      setClientsLoading(false);
-    }
+    };
+
+    // Debounce a busca para evitar muitas requisições
+    const timeoutId = setTimeout(searchClients, 300);
+    return () => clearTimeout(timeoutId);
+  }, [user, searchTerm]);
+
+  const handleClientSelect = (client: Client) => {
+    setSelectedClient(client);
+    setValue('clientId', client.id);
+    setSearchTerm(client.name);
+    setClients([]); // Limpa a lista de resultados
   };
   
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     
     const fileList = Array.from(e.target.files);
-    
-    // Create previews
     const newImagePreviews = fileList.map(file => URL.createObjectURL(file));
     
     setImages(prev => [...prev, ...fileList]);
@@ -108,15 +91,16 @@ function NewSalePage() {
   };
   
   const removeImage = (index: number) => {
-    // Revoke object URL to prevent memory leaks
     URL.revokeObjectURL(imagesPreviews[index]);
-    
     setImages(prev => prev.filter((_, i) => i !== index));
     setImagesPreviews(prev => prev.filter((_, i) => i !== index));
   };
   
   const onSubmit = async (data: SaleForm) => {
-    if (!user) return;
+    if (!user || !selectedClient) {
+      setError('Por favor, selecione um cliente');
+      return;
+    }
     
     if (images.length === 0) {
       setError('Por favor, adicione pelo menos uma foto');
@@ -128,12 +112,11 @@ function NewSalePage() {
     setUploadProgress(0);
     
     try {
-      // Step 1: Create sale record
       const { data: saleData, error: saleError } = await supabase
         .from('sales')
         .insert([
           {
-            client_id: data.clientId,
+            client_id: selectedClient.id,
             sale_date: data.saleDate,
             instagram: data.instagram || null,
             notes: data.notes || null,
@@ -150,8 +133,6 @@ function NewSalePage() {
       }
       
       const saleId = saleData[0].id;
-      
-      // Step 2: Upload images
       const totalImages = images.length;
       let uploadedImages = 0;
       
@@ -166,7 +147,6 @@ function NewSalePage() {
           
         if (uploadError) throw uploadError;
         
-        // Create sale_photo record
         const { error: photoRecordError } = await supabase
           .from('sale_photos')
           .insert([
@@ -213,44 +193,48 @@ function NewSalePage() {
       <div className="card p-6">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="form-group">
-            <label htmlFor="clientId" className="label">Cliente *</label>
-            <div className="flex">
+            <label htmlFor="clientSearch" className="label">Cliente *</label>
+            <div className="relative">
               <input
+                id="clientSearch"
                 type="text"
-                placeholder="Buscar cliente por nome..."
-                className="input rounded-r-none"
+                placeholder="Digite o nome do cliente para buscar..."
+                className="input"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleClientSearch())}
               />
-              <button 
-                type="button"
-                className="btn btn-primary rounded-l-none"
-                onClick={handleClientSearch}
-              >
-                Buscar
-              </button>
+              
+              {clientsLoading && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <div className="animate-spin h-5 w-5 border-2 border-violet-500 border-t-transparent rounded-full"></div>
+                </div>
+              )}
+              
+              {clients.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-gray-800 rounded-md shadow-lg border border-gray-700">
+                  <ul className="py-1">
+                    {clients.map((client) => (
+                      <li key={client.id}>
+                        <button
+                          type="button"
+                          className="w-full px-4 py-2 text-left hover:bg-gray-700 text-gray-200"
+                          onClick={() => handleClientSelect(client)}
+                        >
+                          {client.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {searchTerm.length > 0 && searchTerm.length < 2 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Digite pelo menos 2 caracteres para buscar
+                </p>
+              )}
             </div>
-            
-            <div className="mt-2">
-              <select
-                id="clientId"
-                className={`input ${errors.clientId ? 'border-red-500 focus:ring-red-500' : ''}`}
-                {...register('clientId', { required: 'Cliente é obrigatório' })}
-              >
-                <option value="">Selecione um cliente</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-              {errors.clientId && <p className="error-text">{errors.clientId.message}</p>}
-            </div>
-            
-            {clientsLoading && (
-              <p className="text-sm text-gray-400 mt-1">Carregando clientes...</p>
-            )}
+            {!selectedClient && <input type="hidden" {...register('clientId', { required: true })} />}
           </div>
           
           <div className="form-group">
