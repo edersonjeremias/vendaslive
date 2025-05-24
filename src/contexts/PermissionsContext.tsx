@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useSupabase } from './SupabaseContext';
 import type { UserPermissions, UserRole } from '../types/permissions';
+import { supabase } from '../lib/supabase';
 
 interface PermissionsContextType {
   isAdmin: boolean;
