@@ -67,3 +67,5 @@ function ClientsPage() {
     </div>
   );
 }
+
+export default ClientsPage;
