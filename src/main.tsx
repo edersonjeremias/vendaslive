@@ -4,12 +4,15 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 import { SupabaseProvider } from './contexts/SupabaseContext';
+import { PermissionsProvider } from './contexts/PermissionsContext';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <SupabaseProvider>
-        <App />
+        <PermissionsProvider>
+          <App />
+        </PermissionsProvider>
       </SupabaseProvider>
     </BrowserRouter>
   </StrictMode>

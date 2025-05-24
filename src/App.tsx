@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useSupabase } from './contexts/SupabaseContext';
+import { usePermissions } from './contexts/PermissionsContext';
 
 // Pages
 import Login from './pages/auth/Login';
@@ -12,14 +13,22 @@ import NewClientPage from './pages/clients/NewClientPage';
 import SalesPage from './pages/sales/SalesPage';
 import NewSalePage from './pages/sales/NewSalePage';
 import SaleDetailsPage from './pages/sales/SaleDetailsPage';
+import UsersPage from './pages/admin/UsersPage';
 import Layout from './components/layout/Layout';
 import LoadingScreen from './components/ui/LoadingScreen';
 
-// Protected route component
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useSupabase();
+// Protected route component with permission check
+const ProtectedRoute = ({ 
+  children, 
+  requiredPermission 
+}: { 
+  children: React.ReactNode;
+  requiredPermission?: keyof UserPermissions;
+}) => {
+  const { user, loading: authLoading } = useSupabase();
+  const { permissions, loading: permissionsLoading } = usePermissions();
   
-  if (loading) {
+  if (authLoading || permissionsLoading) {
     return <LoadingScreen />;
   }
   
@@ -27,11 +36,16 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
   
+  if (requiredPermission && !permissions[requiredPermission]) {
+    return <Navigate to="/" replace />;
+  }
+  
   return <>{children}</>;
 };
 
 function App() {
-  const { user, loading } = useSupabase();
+  const { user, loading: authLoading } = useSupabase();
+  const { loading: permissionsLoading } = usePermissions();
   const location = useLocation();
   
   // Scroll to top on route change
@@ -39,7 +53,7 @@ function App() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  if (loading) {
+  if (authLoading || permissionsLoading) {
     return <LoadingScreen />;
   }
 
@@ -69,11 +83,57 @@ function App() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="clients" element={<ClientsPage />} />
-        <Route path="clients/new" element={<NewClientPage />} />
-        <Route path="sales" element={<SalesPage />} />
-        <Route path="sales/new" element={<NewSalePage />} />
-        <Route path="sales/:id" element={<SaleDetailsPage />} />
+        
+        <Route 
+          path="clients" 
+          element={
+            <ProtectedRoute requiredPermission="canViewClients">
+              <ClientsPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="clients/new" 
+          element={
+            <ProtectedRoute requiredPermission="canCreateClients">
+              <NewClientPage />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="sales" 
+          element={
+            <ProtectedRoute requiredPermission="canViewSales">
+              <SalesPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="sales/new" 
+          element={
+            <ProtectedRoute requiredPermission="canCreateSales">
+              <NewSalePage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="sales/:id" 
+          element={
+            <ProtectedRoute requiredPermission="canViewSales">
+              <SaleDetailsPage />
+            </ProtectedRoute>
+          } 
+        />
+        
+        <Route 
+          path="admin/users" 
+          element={
+            <ProtectedRoute>
+              <UsersPage />
+            </ProtectedRoute>
+          } 
+        />
       </Route>
       
       {/* Fallback route */}

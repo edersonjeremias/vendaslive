@@ -4,18 +4,22 @@ import {
   Home, 
   Users, 
   ShoppingBag, 
-  Camera
+  Camera,
+  Shield
 } from 'lucide-react';
 import { useMobileMenu } from '../../contexts/MobileMenuContext';
+import { usePermissions } from '../../contexts/PermissionsContext';
 
 const Sidebar: React.FC = () => {
   const location = useLocation();
   const { isOpen, close } = useMobileMenu();
+  const { isAdmin, permissions } = usePermissions();
   
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Clientes', href: '/clients', icon: Users },
-    { name: 'Vendas', href: '/sales', icon: ShoppingBag },
+    ...(permissions.canViewClients ? [{ name: 'Clientes', href: '/clients', icon: Users }] : []),
+    ...(permissions.canViewSales ? [{ name: 'Vendas', href: '/sales', icon: ShoppingBag }] : []),
+    ...(isAdmin ? [{ name: 'Administração', href: '/admin/users', icon: Shield }] : []),
   ];
   
   const isActive = (path: string) => {
